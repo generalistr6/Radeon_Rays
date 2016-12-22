@@ -108,8 +108,8 @@ int g_progressive = false;
 int g_num_bounces = 5;
 int g_num_samples = -1;
 int g_samplecount = 0;
-float g_ao_radius = 1.f;
-float g_envmapmul = 0.6f;
+float g_ao_radius = 1.f; 
+float g_envmapmul = 1.f;
 float g_cspeed = 100.25f;
 
 float3 g_camera_pos = float3(0.f, 1.f, 4.f);
@@ -501,7 +501,10 @@ void InitData()
     std::cout << "Sensor size: " << g_camera_sensor_size.x * 1000.f << "x" << g_camera_sensor_size.y * 1000.f << "mm\n";
 
     g_scene->SetEnvironment(envPaths[g_envIndex], "", g_envmapmul);
-
+    g_scene->AddDirectionalLight(RadeonRays::float3(-0.3f, -1.f, -0.4f), 2.f * RadeonRays::float3(1.f, 1.f, 1.f));
+    g_scene->AddPointLight(RadeonRays::float3(-0.5f, 1.7f, 0.0f), RadeonRays::float3(1.f, 0.9f, 0.6f));
+    g_scene->AddSpotLight(RadeonRays::float3(0.5f, 1.5f, 0.0f), RadeonRays::float3(-0.5f, -1.0f, 0.1f), RadeonRays::float3(1.f, 0.9f, 0.6f),
+                           std::cos(M_PI_4/2), std::cos(M_PI_4));
 #pragma omp parallel for
     for (int i = 0; i < g_cfgs.size(); ++i)
     {
@@ -812,10 +815,6 @@ void OnKeyUp(int key, int x, int y)
 void Update()
 {
     static auto prevtime = std::chrono::high_resolution_clock::now();
-    static auto updatetime = std::chrono::high_resolution_clock::now();
-
-    static int numbnc = 1;
-    static int framesperbnc = 2;
     auto time = std::chrono::high_resolution_clock::now();
     auto dt = std::chrono::duration_cast<std::chrono::duration<double>>(time - prevtime);
     prevtime = time;

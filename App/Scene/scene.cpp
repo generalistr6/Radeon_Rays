@@ -153,8 +153,8 @@ Scene* Scene::LoadFromObj(std::string const& filename, std::string const& basepa
     std::map<int, int> matmap;
 
     // Enumerate and translate materials. [Manny]
-    for (int i = 0; i < (int)objmaterials.size(); ++i)
-    {
+	for (int i = 0; i < (int)objmaterials.size(); ++i)
+	{
 		// 1. kLambert - diffuse
 		Material diffuseMaterial;
 		{
@@ -319,7 +319,7 @@ Scene* Scene::LoadFromObj(std::string const& filename, std::string const& basepa
 		}
 
 		matmap[i] = scene->materials_.size() - 1;
-    }
+	}
 
     // Enumerate all shapes in the scene
     for (int s = 0; s < (int)objshapes.size(); ++s)
@@ -378,11 +378,12 @@ Scene* Scene::LoadFromObj(std::string const& filename, std::string const& basepa
 
             if (scene->materials_[matidx].type == kEmissive)
             {
-                Emissive emissive;
-                emissive.shapeidx = s;
-                emissive.primidx = i;
-                emissive.m = matidx;
-                scene->emissives_.push_back(emissive);
+                Light light;
+                light.type = kArea;
+                light.shapeidx = s;
+                light.primidx = i;
+                light.matidx = matidx;
+                scene->lights_.push_back(light);
             }
         }
 
@@ -398,14 +399,39 @@ Scene* Scene::LoadFromObj(std::string const& filename, std::string const& basepa
 
     scene->envidx_ = -1;
 
-    std::cout << "Loading complete\n";
-    std::cout << "Number of objects: " << scene->shapes_.size() << "\n";
-    std::cout << "Number of textures: " << scene->textures_.size() << "\n";
-    std::cout << "Number of emissives: " << scene->emissives_.size() << "\n";
-
     return scene;
 }
 
+void Scene::AddDirectionalLight(RadeonRays::float3 const& d, RadeonRays::float3 const& e)
+{
+    Light light;
+    light.type = kDirectional;
+    light.d = normalize(d);
+    light.intensity = e;
+    lights_.push_back(light);
+}
+    
+void Scene::AddPointLight(RadeonRays::float3 const& p, RadeonRays::float3 const& e)
+{
+    Light light;
+    light.type = kPoint;
+    light.p = p;
+    light.intensity = e;
+    lights_.push_back(light);
+}
+    
+void Scene::AddSpotLight(RadeonRays::float3 const& p, RadeonRays::float3 const& d, RadeonRays::float3 const& e, float ia, float oa)
+{
+    Light light;
+    light.type = kSpot;
+    light.p = p;
+    light.d = normalize(d);
+    light.intensity = e;
+    light.ia = ia;
+    light.oa = oa;
+    lights_.push_back(light);
+}
+    
 void Scene::SetEnvironment(std::string const& filename, std::string const& basepath, float envmapmul)
 {
     // Save multiplier
@@ -422,11 +448,11 @@ void Scene::SetEnvironment(std::string const& filename, std::string const& basep
     {
         LoadTexture(filename, texture, texturedata_);
     }
-    
+
     //
     //Ibl* ibl = new Ibl((float3*)(texturedata_[texture.dataoffset].get()), texture.w, texture.h);
     //ibl->Simulate("pdf.png");
-    
+
 
     // Save index
     envidx_ = (int)textures_.size();

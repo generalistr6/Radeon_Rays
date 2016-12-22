@@ -26,9 +26,9 @@ THE SOFTWARE.
 #include <../App/CL/payload.cl>
 #include <../App/CL/random.cl>
 #include <../App/CL/texture.cl>
-#include <../App/CL/light.cl>
 
-int IntersectTriangle(ray const* r, float3 v1, float3 v2, float3 v3, float* a, float* b)
+
+bool IntersectTriangle(ray const* r, float3 v1, float3 v2, float3 v3, float* a, float* b)
 {
     const float3 e1 = v2 - v1;
     const float3 e2 = v3 - v1;
@@ -40,15 +40,15 @@ int IntersectTriangle(ray const* r, float3 v1, float3 v2, float3 v3, float* a, f
     const float  b2 = dot(r->d.xyz, s2) * invd;
     const float temp = dot(e2, s2) * invd;
 
-    if (b1 < 0.f || b1 > 1.f || b2 < 0.f || b1 + b2 > 1.f || temp < 0.f || temp > r->o.w)
+    if (b1 < 0.f || b1 > 1.f || b2 < 0.f || b1 + b2 > 1.f)
     {
-        return 0;
+        return false;
     }
     else
     {
         *a = b1;
         *b = b2;
-        return 1;
+        return true;
     }
 }
 
@@ -56,7 +56,8 @@ int IntersectTriangle(ray const* r, float3 v1, float3 v2, float3 v3, float* a, f
  Environment light
  */
 /// Get intensity for a given direction
-float3 EnvironmentLight_GetLe(
+float3 EnvironmentLight_GetLe(// Light
+                              Light const* light,
                               // Scene
                               Scene const* scene,
                               // Geometry
@@ -69,12 +70,14 @@ float3 EnvironmentLight_GetLe(
 {
     // Sample envmap
     *wo *= 100000.f;
-    // 
+    //
     return scene->envmapmul * Texture_SampleEnvMap(normalize(*wo), TEXTURE_ARGS_IDX(scene->envmapidx));
 }
 
 /// Sample direction to the light
-float3 EnvironmentLight_Sample(// Scene
+float3 EnvironmentLight_Sample(// Light
+                               Light const* light,
+                               // Scene
                                Scene const* scene,
                                // Geometry
                                DifferentialGeometry const* dg,
@@ -92,16 +95,19 @@ float3 EnvironmentLight_Sample(// Scene
 
     // Generate direction
     *wo = 100000.f * d;
-    
+
     // Envmap PDF
     *pdf = fabs(dot(dg->n, normalize(d))) / PI;
-    
+
     // Sample envmap
     return scene->envmapmul * Texture_SampleEnvMap(d, TEXTURE_ARGS_IDX(scene->envmapidx));
 }
 
 /// Get PDF for a given direction
-float EnvironmentLight_GetPdf(// Scene
+float EnvironmentLight_GetPdf(
+                              // Light
+                              Light const* light,
+                              // Scene
                               Scene const* scene,
                               // Geometry
                               DifferentialGeometry const* dg,
@@ -120,7 +126,7 @@ float EnvironmentLight_GetPdf(// Scene
  */
 // Get intensity for a given direction
 float3 AreaLight_GetLe(// Emissive object
-                       Emissive const* light,
+                       Light const* light,
                        // Scene
                        Scene const* scene,
                        // Geometry
@@ -132,8 +138,8 @@ float3 AreaLight_GetLe(// Emissive object
                        )
 {
     ray r;
-    r.o.xyz = dg->p + normalize(*wo) * 0.01f;
-    r.d.xyz = *wo;
+    r.o.xyz = dg->p;
+    r.d.xyz = normalize(*wo);
 
     int shapeidx = light->shapeidx;
     int primidx = light->primidx;
@@ -161,8 +167,9 @@ float3 AreaLight_GetLe(// Emissive object
     float2 uv1 = scene->uvs[shape.startvtx + i1];
     float2 uv2 = scene->uvs[shape.startvtx + i2];
 
-    
+
     // Intersect ray against this area light
+
     float a, b;
     if (IntersectTriangle(&r, v0, v1, v2, &a, &b))
     {
@@ -172,23 +179,14 @@ float3 AreaLight_GetLe(// Emissive object
 
         float3 d = p - dg->p;
         float  ld = length(d);
+        *wo = p - dg->p;
 
         int matidx = scene->materialids[shape.startidx / 3 + primidx];
         Material mat = scene->materials[matidx];
 
         const float3 ke = Texture_GetValue3f(mat.kx.xyz, tx, TEXTURE_ARGS_IDX(mat.kxmapidx));
         float ndotv = dot(n, -(normalize(d)));
-
-        if (ndotv > 0.f)
-        {
-            *wo = d;
-            float denom = ld * ld;
-            return  denom > 0.f ? ke * ndotv / denom : 0.f;
-        }
-        else
-        {
-            return 0.f;
-        }
+        return  ke;
     }
     else
     {
@@ -198,7 +196,7 @@ float3 AreaLight_GetLe(// Emissive object
 
 /// Sample direction to the light
 float3 AreaLight_Sample(// Emissive object
-                        Emissive const* light,
+                        Light const* light,
                         // Scene
                         Scene const* scene,
                         // Geometry
@@ -214,7 +212,7 @@ float3 AreaLight_Sample(// Emissive object
 {
     int shapeidx = light->shapeidx;
     int primidx = light->primidx;
-   
+
     // Extract shape data
     Shape shape = scene->shapes[shapeidx];
 
@@ -259,9 +257,9 @@ float3 AreaLight_Sample(// Emissive object
     Material mat = scene->materials[matidx];
 
     const float3 ke = Texture_GetValue3f(mat.kx.xyz, tx, TEXTURE_ARGS_IDX(mat.kxmapidx));
- 
+
     float3 v = -normalize(*wo);
-    
+
     float ndotv = dot(n, v);
 
     if (ndotv > 0.f)
@@ -278,7 +276,7 @@ float3 AreaLight_Sample(// Emissive object
 
 /// Get PDF for a given direction
 float AreaLight_GetPdf(// Emissive object
-                       Emissive const* light,
+                       Light const* light,
                        // Scene
                        Scene const* scene,
                        // Geometry
@@ -290,7 +288,7 @@ float AreaLight_GetPdf(// Emissive object
                        )
 {
     ray r;
-    r.o.xyz = dg->p + normalize(wo) * 0.001f;
+    r.o.xyz = dg->p;
     r.d.xyz = wo;
 
     int shapeidx = light->shapeidx;
@@ -338,6 +336,185 @@ float AreaLight_GetPdf(// Emissive object
     }
 }
 
+/*
+Directional light
+*/
+// Get intensity for a given direction
+float3 DirectionalLight_GetLe(// Emissive object
+    Light const* light,
+    // Scene
+    Scene const* scene,
+    // Geometry
+    DifferentialGeometry const* dg,
+    // Direction to light source
+    float3* wo,
+    // Textures
+    TEXTURE_ARG_LIST
+)
+{
+    return 0.f;
+}
+
+/// Sample direction to the light
+float3 DirectionalLight_Sample(// Emissive object
+    Light const* light,
+    // Scene
+    Scene const* scene,
+    // Geometry
+    DifferentialGeometry const* dg,
+    // Textures
+    TEXTURE_ARG_LIST,
+    // Sample
+    float2 sample,
+    // Direction to light source
+    float3* wo,
+    // PDF
+    float* pdf)
+{
+    *wo = 100000.f * -light->d;
+    *pdf = 1.f;
+    return light->intensity;
+}
+
+/// Get PDF for a given direction
+float DirectionalLight_GetPdf(// Emissive object
+    Light const* light,
+    // Scene
+    Scene const* scene,
+    // Geometry
+    DifferentialGeometry const* dg,
+    // Direction to light source
+    float3 wo,
+    // Textures
+    TEXTURE_ARG_LIST
+)
+{
+    return 0.f;
+}
+
+/*
+ Point light
+ */
+// Get intensity for a given direction
+float3 PointLight_GetLe(// Emissive object
+                              Light const* light,
+                              // Scene
+                              Scene const* scene,
+                              // Geometry
+                              DifferentialGeometry const* dg,
+                              // Direction to light source
+                              float3* wo,
+                              // Textures
+                              TEXTURE_ARG_LIST
+                              )
+{
+    return 0.f;
+}
+
+/// Sample direction to the light
+float3 PointLight_Sample(// Emissive object
+                               Light const* light,
+                               // Scene
+                               Scene const* scene,
+                               // Geometry
+                               DifferentialGeometry const* dg,
+                               // Textures
+                               TEXTURE_ARG_LIST,
+                               // Sample
+                               float2 sample,
+                               // Direction to light source
+                               float3* wo,
+                               // PDF
+                               float* pdf)
+{
+    *wo = light->p - dg->p;
+    *pdf = 1.f;
+    return light->intensity;
+}
+
+/// Get PDF for a given direction
+float PointLight_GetPdf(// Emissive object
+                              Light const* light,
+                              // Scene
+                              Scene const* scene,
+                              // Geometry
+                              DifferentialGeometry const* dg,
+                              // Direction to light source
+                              float3 wo,
+                              // Textures
+                              TEXTURE_ARG_LIST
+                              )
+{
+    return 0.f;
+}
+
+/*
+ Spot light
+ */
+// Get intensity for a given direction
+float3 SpotLight_GetLe(// Emissive object
+                        Light const* light,
+                        // Scene
+                        Scene const* scene,
+                        // Geometry
+                        DifferentialGeometry const* dg,
+                        // Direction to light source
+                        float3* wo,
+                        // Textures
+                        TEXTURE_ARG_LIST
+                        )
+{
+    return 0.f;
+}
+
+/// Sample direction to the light
+float3 SpotLight_Sample(// Emissive object
+                         Light const* light,
+                         // Scene
+                         Scene const* scene,
+                         // Geometry
+                         DifferentialGeometry const* dg,
+                         // Textures
+                         TEXTURE_ARG_LIST,
+                         // Sample
+                         float2 sample,
+                         // Direction to light source
+                         float3* wo,
+                         // PDF
+                         float* pdf)
+{
+    *wo = light->p - dg->p;
+    float ddotwo = dot(-normalize(*wo), light->d);
+    
+    if (ddotwo > light->oa)
+    {
+        *pdf = 1.f;
+        return ddotwo > light->ia ? light->intensity : light->intensity * (1.f - (light->ia - ddotwo) / (light->ia - light->oa));
+    }
+    else
+    {
+        *pdf = 0.f;
+        return 0.f;
+    }
+}
+
+/// Get PDF for a given direction
+float SpotLight_GetPdf(// Emissive object
+                        Light const* light,
+                        // Scene
+                        Scene const* scene,
+                        // Geometry
+                        DifferentialGeometry const* dg,
+                        // Direction to light source
+                        float3 wo,
+                        // Textures
+                        TEXTURE_ARG_LIST
+                        )
+{
+    return 0.f;
+}
+
+
 
 
 /*
@@ -357,16 +534,23 @@ float3 Light_GetLe(// Light index
                    TEXTURE_ARG_LIST
                    )
 {
-    int numemissives = scene->numemissives;
-    if (idx == numemissives)
+    Light light = scene->lights[idx];
+
+    switch(light.type)
     {
-        return EnvironmentLight_GetLe(scene, dg, wo, TEXTURE_ARGS);
+        case kIbl:
+            return EnvironmentLight_GetLe(&light, scene, dg, wo, TEXTURE_ARGS);
+        case kArea:
+            return AreaLight_GetLe(&light, scene, dg, wo, TEXTURE_ARGS);
+        case kDirectional:
+            return DirectionalLight_GetLe(&light, scene, dg, wo, TEXTURE_ARGS);
+        case kPoint:
+            return PointLight_GetLe(&light, scene, dg, wo, TEXTURE_ARGS);
+        case kSpot:
+            return SpotLight_GetLe(&light, scene, dg, wo, TEXTURE_ARGS);
     }
-    else
-    {
-        Emissive emissive = scene->emissives[idx];
-        return AreaLight_GetLe(&emissive, scene, dg, wo, TEXTURE_ARGS);
-    }
+
+    return make_float3(0.f, 0.f, 0.f);
 }
 
 /// Sample direction to the light
@@ -385,16 +569,24 @@ float3 Light_Sample(// Light index
                     // PDF
                     float* pdf)
 {
-    int numemissives = scene->numemissives;
-    if (idx == numemissives)
+    Light light = scene->lights[idx];
+
+    switch(light.type)
     {
-        return EnvironmentLight_Sample(scene, dg, TEXTURE_ARGS, sample, wo, pdf);
+        case kIbl:
+            return EnvironmentLight_Sample(&light, scene, dg, TEXTURE_ARGS, sample, wo, pdf);
+        case kArea:
+            return AreaLight_Sample(&light, scene, dg, TEXTURE_ARGS, sample, wo, pdf);
+        case kDirectional:
+            return DirectionalLight_Sample(&light, scene, dg, TEXTURE_ARGS, sample, wo, pdf);
+        case kPoint:
+            return PointLight_Sample(&light, scene, dg, TEXTURE_ARGS, sample, wo, pdf);
+        case kSpot:
+            return SpotLight_Sample(&light, scene, dg, TEXTURE_ARGS, sample, wo, pdf);
     }
-    else
-    {
-        Emissive emissive = scene->emissives[idx];
-        return AreaLight_Sample(&emissive, scene, dg, TEXTURE_ARGS, sample, wo, pdf);
-    }
+
+    *pdf = 0.f;
+    return make_float3(0.f, 0.f, 0.f);
 }
 
 /// Get PDF for a given direction
@@ -410,16 +602,31 @@ float Light_GetPdf(// Light index
                    TEXTURE_ARG_LIST
                    )
 {
-    int numemissives = scene->numemissives;
-    if (idx == numemissives)
+    Light light = scene->lights[idx];
+
+    switch(light.type)
     {
-        return EnvironmentLight_GetPdf(scene, dg, wo, TEXTURE_ARGS);
+        case kIbl:
+            return EnvironmentLight_GetPdf(&light, scene, dg, wo, TEXTURE_ARGS);
+        case kArea:
+            return AreaLight_GetPdf(&light, scene, dg, wo, TEXTURE_ARGS);
+        case kDirectional:
+            return DirectionalLight_GetPdf(&light, scene, dg, wo, TEXTURE_ARGS);
+        case kPoint:
+            return PointLight_GetPdf(&light, scene, dg, wo, TEXTURE_ARGS);
+        case kSpot:
+            return SpotLight_GetPdf(&light, scene, dg, wo, TEXTURE_ARGS);
     }
-    else
-    {
-        Emissive emissive = scene->emissives[idx];
-        return AreaLight_GetPdf(&emissive, scene, dg, wo, TEXTURE_ARGS);
-    }
+
+    return 0.f;
+}
+
+/// Check if the light is singular
+bool Light_IsSingular(__global Light const* light)
+{
+    return light->type == kPoint ||
+        light->type == kSpot ||
+        light->type == kDirectional;
 }
 
 #endif // LIGHT_CLnv

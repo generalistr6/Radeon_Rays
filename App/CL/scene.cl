@@ -87,7 +87,7 @@ void FillDifferentialGeometry(// Scene
     
     float det = du1 * dv2 - dv1 * du2;
     
-    if (det != 0.f)
+    if (0 && det != 0.f)
     {
         float invdet = 1.f / det;
         diffgeo->dpdu = normalize( (dv2 * dp1 - dv1 * dp2) * invdet );
@@ -122,10 +122,10 @@ void FillDifferentialGeometry(// Scene
 
 int Scene_SampleLight(Scene const* scene, float sample, float* pdf)
 {
-    int numlights = scene->numemissives;
-    int lightidx = clamp((int)(sample * numlights), 0, numlights - 1);
-    *pdf = 1.f / numlights;
-    return lightidx;
+    int num_lights = scene->num_lights;
+    int light_idx = clamp((int)(sample * num_lights), 0, num_lights - 1);
+    *pdf = 1.f / num_lights;
+    return light_idx;
 }
 
 

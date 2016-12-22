@@ -111,10 +111,6 @@ namespace Baikal
         , m_scene_tracker(context, devidx)
         , m_num_bounces(num_bounces)
     {
-
-        // Create parallel primitives
-        m_render_data->pp = CLWParallelPrimitives(m_context);
-
         std::string buildopts;
 
         buildopts.append(" -cl-mad-enable -cl-fast-relaxed-math -cl-std=CL1.2 -I . ");
@@ -130,6 +126,9 @@ namespace Baikal
             ""
 #endif
             );
+        
+        // Create parallel primitives
+        m_render_data->pp = CLWParallelPrimitives(m_context, buildopts.c_str());
 
         // Load kernels
 #ifndef RR_EMBED_KERNELS
@@ -378,8 +377,8 @@ namespace Baikal
         shadekernel.SetArg(argc++, scene.texturedata);
         shadekernel.SetArg(argc++, scene.envmapidx);
         shadekernel.SetArg(argc++, scene.envmapmul);
-        shadekernel.SetArg(argc++, scene.emissives);
-        shadekernel.SetArg(argc++, scene.numemissive);
+        shadekernel.SetArg(argc++, scene.lights);
+        shadekernel.SetArg(argc++, scene.num_lights);
         shadekernel.SetArg(argc++, rand_uint());
         shadekernel.SetArg(argc++, m_render_data->samplers);
         shadekernel.SetArg(argc++, m_render_data->sobolmat);
@@ -421,8 +420,8 @@ namespace Baikal
         shadekernel.SetArg(argc++, scene.texturedata);
         shadekernel.SetArg(argc++, scene.envmapidx);
         shadekernel.SetArg(argc++, scene.envmapmul);
-        shadekernel.SetArg(argc++, scene.emissives);
-        shadekernel.SetArg(argc++, scene.numemissive);
+        shadekernel.SetArg(argc++, scene.lights);
+        shadekernel.SetArg(argc++, scene.num_lights);
         shadekernel.SetArg(argc++, rand_uint());
         shadekernel.SetArg(argc++, m_render_data->samplers);
         shadekernel.SetArg(argc++, m_render_data->sobolmat);
@@ -589,7 +588,7 @@ namespace Baikal
         misskernel.SetArg(argc++, scene.texturedata);
         misskernel.SetArg(argc++, scene.envmapidx);
         misskernel.SetArg(argc++, scene.envmapmul);
-        misskernel.SetArg(argc++, scene.numemissive);
+        misskernel.SetArg(argc++, scene.num_lights);
         misskernel.SetArg(argc++, m_render_data->paths);
         misskernel.SetArg(argc++, scene.volumes);
         misskernel.SetArg(argc++, m_output->data());

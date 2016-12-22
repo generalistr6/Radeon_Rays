@@ -21,7 +21,7 @@ THE SOFTWARE.
 ********************************************************************/
 #ifndef PAYLOAD_CL
 #define PAYLOAD_CL
-#define SOBOL
+//#define SOBOL
 #define MULTISCATTER
 
 /// Ray descriptor
@@ -33,7 +33,7 @@ typedef struct _ray
     float4 d;
     /// x - ray mask, y - activity flag
     int2 extra;
-    int2 padding;
+    float2 padding;
 } ray;
 
 /// Intersection data returned by RadeonRays
@@ -87,8 +87,6 @@ typedef struct _Emissive
 } Emissive;
 
 
-
-
 typedef enum _PathFlags
 {
     kNone = 0x0,
@@ -138,6 +136,53 @@ typedef struct _Material
 
 } Material;
 
+
+enum LightType
+{
+    kPoint = 0x1,
+    kDirectional,
+    kSpot,
+    kArea,
+    kIbl
+};
+
+typedef struct _Light
+{
+    int type;
+
+    union
+    {
+        // Area light
+        struct
+        {
+            int shapeidx;
+            int primidx;
+            int matidx;
+        };
+
+        // IBL
+        struct
+        {
+            int tex;
+            int texdiffuse;
+            float multiplier;
+        };
+        
+        
+        // Spot
+        struct
+        {
+            float ia;
+            float oa;
+            float f;
+        };
+    };
+
+    float3 p;
+    float3 d;
+    float3 intensity;
+} Light;
+
 typedef struct _Scene
 {
     // Vertices
@@ -155,13 +200,13 @@ typedef struct _Scene
     // Materials
     __global Material const* materials;
     // Emissive objects
-    __global Emissive const* emissives;
+    __global Light const* lights;
     // Envmap idx
     int envmapidx;
     // Envmap multiplier
     float envmapmul;
     // Number of emissive objects
-    int numemissives;
+    int num_lights;
 } Scene;
 
 // Hit data
@@ -179,7 +224,7 @@ typedef struct _DifferentialGeometry
     float3 dpdu;
     float3 dpdv;
     float  area;
-    // Material 
+    // Material
     Material mat;
 } DifferentialGeometry;
 
@@ -235,6 +280,16 @@ void Ray_SetInactive(__global ray* r)
     r->extra.y = 0;
 }
 
+void Ray_SetExtra(__global ray* r, float2 extra)
+{
+    r->padding = extra;
+}
+
+float2 Ray_GetExtra(__global ray const* r)
+{
+    return r->padding;
+}
+
 void Ray_Init(__global ray* r, float3 o, float3 d, float maxt, float time, int mask)
 {
     // TODO: Check if it generates MTBUF_XYZW write
@@ -245,5 +300,7 @@ void Ray_Init(__global ray* r, float3 o, float3 d, float maxt, float time, int m
     r->extra.x = mask;
     r->extra.y = 0xFFFFFFFF;
 }
+
+
 
 #endif // PAYLOAD_CL
