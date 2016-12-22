@@ -44,6 +44,16 @@ PerspectiveCamera::PerspectiveCamera(float3 const& eye, float3 const& at, float3
     m_up      = cross(m_right, m_forward);
 }
 
+RadeonRays::float3 PerspectiveCamera::GetCameraPos() const // [Manny]
+{
+	return m_p;
+}
+
+float PerspectiveCamera::GetCameraAngle() const // [Manny]
+{
+	return acos(dot(normalize(-m_forward), RadeonRays::float3(0.f, 0.f, 1.f)));
+}
+
 // Rotate camera around world Z axis, use for FPS camera
 void PerspectiveCamera::Rotate(float angle)
 {

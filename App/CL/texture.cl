@@ -150,17 +150,17 @@ float3 Texture_SampleEnvMap(float3 d, TEXTURE_ARG_LIST_IDX(texidx))
 
     // Map to [0,1]x[0,1] range and reverse Y axis
     float2 uv;
-    uv.x = phi / (2*PI);
+    uv.x = (PI + phi) / (2*PI);
     uv.y = 1.f - theta / PI;
 
     // Sample the texture
-    return Texture_Sample2D(uv, TEXTURE_ARGS_IDX(texidx)).xyz;
+    return native_powr(Texture_Sample2D(uv, TEXTURE_ARGS_IDX(texidx)).xyz, 1.8f / 1.f);
 }
 
 /// Get data from parameter value or texture
 float3 Texture_GetValue3f(
                 // Value
-                float3 v,
+                float3 v, 
                 // Texture coordinate
                 float2 uv,
                 // Texture args
@@ -171,7 +171,7 @@ float3 Texture_GetValue3f(
     if (texidx != -1)
     {
         // Sample texture
-        return native_powr(Texture_Sample2D(uv, TEXTURE_ARGS_IDX(texidx)).xyz, 2.2f);
+        return native_powr(Texture_Sample2D(uv, TEXTURE_ARGS_IDX(texidx)).xyz * v, 2.2f);
     }
 
     // Return fixed color otherwise
@@ -192,7 +192,7 @@ float4 Texture_GetValue4f(
     if (texidx != -1)
     {
         // Sample texture
-        return native_powr(Texture_Sample2D(uv, TEXTURE_ARGS_IDX(texidx)), 2.2f);
+        return native_powr(Texture_Sample2D(uv, TEXTURE_ARGS_IDX(texidx)) * v, 2.2f);
     }
 
     // Return fixed color otherwise

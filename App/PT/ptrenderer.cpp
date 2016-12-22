@@ -164,6 +164,7 @@ namespace Baikal
     void PtRenderer::SetNumBounces(int num_bounces)
     {
         m_num_bounces = num_bounces;
+		fprintf(stderr, "num_bounces = %d\n", num_bounces);
     }
 
     void PtRenderer::Preprocess(Scene const& scene)
@@ -366,7 +367,7 @@ namespace Baikal
         shadekernel.SetArg(argc++, m_render_data->compacted_indices);
         shadekernel.SetArg(argc++, m_render_data->pixelindices[pass & 0x1]);
         shadekernel.SetArg(argc++, m_render_data->hitcount);
-        shadekernel.SetArg(argc++, scene.vertices);
+		shadekernel.SetArg(argc++, scene.vertices);
         shadekernel.SetArg(argc++, scene.normals);
         shadekernel.SetArg(argc++, scene.uvs);
         shadekernel.SetArg(argc++, scene.indices);

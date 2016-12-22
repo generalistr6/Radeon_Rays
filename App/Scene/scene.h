@@ -227,5 +227,10 @@ namespace Baikal
             int bgimgidx_;
             // Dirty flags
             mutable int dirty_;
+
+		public:
+			static float specularRoughness_; // [Manny]
+			static float normalMapIntensity_; // [Manny]
+
         };
     }

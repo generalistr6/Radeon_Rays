@@ -71,6 +71,7 @@ namespace Baikal
             else if (scene.dirty() & Scene::DirtyFlags::kGeometryTransform)
             {
                 // TODO: this is not yet supported in the renderer
+				//UpdateModelMatrix(scene, out); // [Manny]
             }
 
             if (scene.dirty() & Scene::DirtyFlags::kMaterials)
@@ -103,6 +104,17 @@ namespace Baikal
         // Update camera data
         m_context.WriteBuffer(0, out.camera, scene.camera_.get(), 1);
     }
+
+	void SceneTracker::UpdateModelMatrix(Scene const & scene, ClwScene & out) const  // [Manny]
+	{
+		//out.shapes = m_context.CreateBuffer<Scene::Shape>(scene.shapes_.size(), CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, (void*)&scene.shapes_[0]);
+		//for (int i = 0; i < (int)scene.shapes_.size(); ++i)
+		//{
+		//	out.isect_shapes[i]->SetTransform(scene.shapes_[i].m, inverse(scene.shapes_[i].m));
+		//}
+		RecompileFull(scene, out);
+		ReloadIntersector(scene, out);
+	}
 
     void SceneTracker::UpdateGeometry(Scene const& scene, ClwScene& out) const
     {
@@ -146,7 +158,7 @@ namespace Baikal
         // Create static buffers
         out.camera = m_context.CreateBuffer<PerspectiveCamera>(1, CL_MEM_READ_ONLY |  CL_MEM_COPY_HOST_PTR, scene.camera_.get());
 
-        // Vertex, normal and uv data
+		// Vertex, normal and uv data
         out.vertices = m_context.CreateBuffer<float3>(scene.vertices_.size(), CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, (void*)&scene.vertices_[0]);
         m_vidmem_usage += scene.vertices_.size() * sizeof(float3);
 

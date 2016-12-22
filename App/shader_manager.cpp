@@ -48,7 +48,8 @@ static void LoadFileContents(std::string const& name, std::vector<char>& content
     }
     else
     {
-        throw std::runtime_error("Cannot read the contents of a file");
+		std::string str = "Cannot read the contents of a file - " + name;
+		throw std::runtime_error(str.c_str());
     }
 }
 

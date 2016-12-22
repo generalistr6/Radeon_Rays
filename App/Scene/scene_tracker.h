@@ -28,6 +28,7 @@ namespace Baikal
 
     private:
         void UpdateCamera(Scene const& scene, ClwScene& out) const;
+		void UpdateModelMatrix(Scene const& scene, ClwScene& out) const; // [Manny]
         void UpdateGeometry(Scene const& scene, ClwScene& out) const;
         void UpdateMaterials(Scene const& scene, ClwScene& out) const;
         void UpdateMaterialInputs(Scene const& scene, ClwScene& out) const;

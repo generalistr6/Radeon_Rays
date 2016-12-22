@@ -163,7 +163,16 @@ void Material_Select(
 #else
                 float sample = UniformSampler_Sample2D(rng).x;
 #endif
-                float weight = Texture_GetValue1f(mat.ns, dg->uv, TEXTURE_ARGS_IDX(mat.nsmapidx));
+				// Alpha blending. [Manny]
+				float weight = 0.f;
+				if (mat.nsmapidx == -1)
+				{
+					weight = 1.f - mat.ns;
+				}
+				else
+				{
+					weight = 1.f - Texture_GetValue4f(make_float4(0.f, 0.f, 0.f, 1.f), dg->uv, TEXTURE_ARGS_IDX(mat.nsmapidx)).w;
+				}
 
                 if (sample < weight)
                 {

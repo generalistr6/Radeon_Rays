@@ -430,8 +430,8 @@ __kernel void ShadeSurface(
         //}
 
         // Check if we need to apply normal map
-        //ApplyNormalMap(&diffgeo, TEXTURE_ARGS);
-        ApplyBumpMap(&diffgeo, TEXTURE_ARGS);
+        ApplyNormalMap(&diffgeo, TEXTURE_ARGS); // [Manny]
+        //ApplyBumpMap(&diffgeo, TEXTURE_ARGS);
         float lightpdf = 0.f;
         float bxdflightpdf = 0.f;
         float bxdfpdf = 0.f;

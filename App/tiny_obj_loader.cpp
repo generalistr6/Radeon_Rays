@@ -448,11 +448,18 @@ std::string LoadMtl (
     }
 
     // normal texture
-    if ((0 == strncmp(token, "map_Ns", 6)) && isSpace(token[6])) {
+    if ((0 == strncmp(token, "map_Ns", 6)) && isSpace(token[6]))
+	{
       token += 7;
       material.normal_texname = token;
       continue;
     }
+	else if ((0 == strncmp(token, "map_Bump", 8)) && isSpace(token[8])) // [Manny]
+	{
+		token += 9;
+		material.normal_texname = token;
+		continue;
+	}
 
     // unknown parameter
     const char* _space = strchr(token, ' ');

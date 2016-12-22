@@ -29,6 +29,7 @@ THE SOFTWARE.
 #include <Windows.h>
 #include "GL/glew.h"
 #include "GLUT/GLUT.h"
+#include "GLUT/freeglut_ext.h"
 #else
 #include <CL/cl.h>
 #include <GL/glew.h>
@@ -36,7 +37,7 @@ THE SOFTWARE.
 #include <GL/glx.h>
 #endif
 
-
+#include <string>
 #include <memory>
 #include <chrono>
 #include <cassert>
@@ -76,10 +77,21 @@ using namespace RadeonRays;
 // Help message
 char const* kHelpMessage =
 "App [-p path_to_models][-f model_name][-b][-r][-ns number_of_shadow_rays][-ao ao_radius][-w window_width][-h window_height][-nb number_of_indirect_bounces]";
-char const* g_path =
-"../Resources/bmw";
-char const* g_modelname = "i8.obj";
-char const* g_envmapname = "../Resources/Textures/studio015.hdr";
+//char const* g_path =
+//"../Resources/bmw/knit";
+//char const* g_modelname = "knit.obj";
+//char const* g_envmapname = "../Resources/Textures/ENV04.hdr";
+
+struct OBJResources
+{
+	std::string basePath;
+	std::string objFilePath;
+};
+
+std::vector<OBJResources>  objPaths;
+std::vector<std::string>  envPaths;
+int g_objIndex = 2;
+int g_envIndex = 3;
 
 std::unique_ptr<ShaderManager>    g_shader_manager;
 
@@ -87,8 +99,8 @@ GLuint g_vertex_buffer;
 GLuint g_index_buffer;
 GLuint g_texture;
 
-int g_window_width = 800;
-int g_window_height = 600;
+int g_window_width = 1024;
+int g_window_height = 1024;
 int g_num_shadow_rays = 1;
 int g_num_ao_rays = 1;
 int g_ao_enabled = false;
@@ -97,7 +109,7 @@ int g_num_bounces = 5;
 int g_num_samples = -1;
 int g_samplecount = 0;
 float g_ao_radius = 1.f;
-float g_envmapmul = 1.f;
+float g_envmapmul = 0.6f;
 float g_cspeed = 100.25f;
 
 float3 g_camera_pos = float3(0.f, 1.f, 4.f);
@@ -115,7 +127,17 @@ bool g_recording_enabled = false;
 int g_frame_count = 0;
 bool g_benchmark = false;
 bool g_interop = true;
-ConfigManager::Mode g_mode = ConfigManager::Mode::kUseSingleGpu;
+ConfigManager::Mode g_mode = ConfigManager::Mode::kUseSingleCpu;    
+
+enum MaterialUpdateMode
+{
+	MaterialUpdateMode_specularRoughness,
+	MaterialUpdateMode_normalMapIntensity,
+	MaterialUpdateMode_lightAngle
+};
+
+MaterialUpdateMode g_material_update_mode = MaterialUpdateMode_specularRoughness;
+bool g_is_display_material_info = true;
 
 using namespace tinyobj;
 
@@ -154,9 +176,12 @@ static bool     g_is_back_pressed = false;
 static bool     g_is_home_pressed = false;
 static bool     g_is_end_pressed = false;
 static bool     g_is_mouse_tracking = false;
+static bool		g_is_mouse_wheel = false;
 static float2   g_mouse_pos = float2(0, 0);
 static float2   g_mouse_delta = float2(0, 0);
-
+static bool		g_material_changed = false;
+static bool		g_light_changed = false;
+static float	g_mouse_wheel = 10.00f;
 
 // CLW stuff
 CLWImage2D g_cl_interop_image;
@@ -206,6 +231,98 @@ void Render()
             glBindBuffer(GL_ARRAY_BUFFER, 0);
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
             glUseProgram(0);
+
+			if (g_is_display_material_info)
+			{
+				glColor3f(0.6f, 0.6f, 0.6f);
+				glDisable(GL_LIGHTING);
+
+				using namespace Baikal;
+
+				glMatrixMode(GL_PROJECTION);
+				glPushMatrix();
+				glLoadIdentity();
+				gluOrtho2D(0, g_window_width, 0, g_window_height);
+
+				glMatrixMode(GL_MODELVIEW);
+				glPushMatrix();
+				glLoadIdentity();
+
+				// specular roughness
+				{
+					glRasterPos2i(10, g_window_height - 30);  // move in 10 pixels from the left and bottom edges
+					std::string str;
+					str.resize(256);
+					sprintf(&(str[0]), "1 : Specular roughness : %f (q-decrease, w-increase)\n", Scene::specularRoughness_);
+					for (int i = 0; i < str.length(); ++i)
+					{
+						if (g_material_update_mode == MaterialUpdateMode_specularRoughness)
+							glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, str[i]);
+						else
+							glutBitmapCharacter(GLUT_BITMAP_HELVETICA_12, str[i]);
+					}
+				}
+
+				// normal map intensity
+				{
+					glRasterPos2i(10, g_window_height - 50);  // move in 10 pixels from the left and bottom edges
+					std::string str;
+					str.resize(256);
+					sprintf(&(str[0]), "2 : Normal map intensity : %f (q-decrease, w-increase)\n", Scene::normalMapIntensity_);
+					for (int i = 0; i < str.length(); ++i)
+					{
+						if (g_material_update_mode == MaterialUpdateMode_normalMapIntensity)
+							glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, str[i]);
+						else
+							glutBitmapCharacter(GLUT_BITMAP_HELVETICA_12, str[i]);
+					}
+				}
+
+				// environment map rotation
+				{
+					glRasterPos2i(10, g_window_height - 70);  // move in 10 pixels from the left and bottom edges
+					std::string str;
+					str.resize(256);
+					sprintf(&(str[0]), "3 : Environment map rotation(degree) : %d (q-decrease, w-increase)\n", (int)(g_scene->camera_->GetCameraAngle() * (180 / PI)));
+					for (int i = 0; i < str.length(); ++i)
+					{
+						if (g_material_update_mode == MaterialUpdateMode_lightAngle)
+							glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, str[i]);
+						else
+							glutBitmapCharacter(GLUT_BITMAP_HELVETICA_12, str[i]);
+					}
+				}
+
+				// g_num_bounces
+				{
+					glRasterPos2i(10, g_window_height - 90);  // move in 10 pixels from the left and bottom edges
+					std::string str;
+					str.resize(256);
+					sprintf(&(str[0]), "    Bounce number : %d ('page up'-decrease, 'page down'-increase)\n", g_num_bounces);
+					for (int i = 0; i < str.length(); ++i)
+					{
+						glutBitmapCharacter(GLUT_BITMAP_HELVETICA_12, str[i]);
+					}
+				}
+
+				// show hide toggle
+				{
+					glRasterPos2i(10, g_window_height - 110);  // move in 10 pixels from the left and bottom edges
+					std::string str;
+					str.resize(256);
+					sprintf(&(str[0]), "' : show / hide text.\n");
+					for (int i = 0; i < str.length(); ++i)
+					{
+						glutBitmapCharacter(GLUT_BITMAP_HELVETICA_12, str[i]);
+					}
+				}
+
+				glPopMatrix();
+
+				glMatrixMode(GL_PROJECTION);
+				glPopMatrix();
+				glMatrixMode(GL_MODELVIEW);
+			}
 
             glFinish();
         }
@@ -332,15 +449,35 @@ void InitCl()
 
 void InitData()
 {
-
     rand_init();
 
     // Load obj file
-    std::string basepath = g_path;
+    std::string basepath = objPaths[g_objIndex].basePath;
     basepath += "/";
-    std::string filename = basepath + g_modelname;
+	std::string filename = objPaths[g_objIndex].objFilePath;
 
     g_scene.reset(Baikal::Scene::LoadFromObj(filename, basepath));
+
+	float3 min = float3(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max());
+	float3 max = float3(std::numeric_limits<float>::min(), std::numeric_limits<float>::min(), std::numeric_limits<float>::min());
+
+	for (int i = 0; i < g_scene->vertices_.size(); ++i)
+	{
+		auto& v = g_scene->vertices_[i];
+
+		min.x = std::min(min.x, v.x);
+		min.y = std::min(min.y, v.y);
+		min.z = std::min(min.z, v.z);
+
+		max.x = std::max(max.x, v.x);
+		max.y = std::max(max.y, v.y);
+		max.z = std::max(max.z, v.z);
+	}
+
+	auto diagonalLength = std::sqrtf((max.x - min.x) * (max.x - min.x) + (max.y - min.y) * (max.y - min.y) + (max.z - min.z) * (max.z - min.z));
+	g_camera_pos = float3((max.x + min.x) * 0.5f, (max.y + min.y) * 0.5f, max.z + diagonalLength);
+	g_camera_at = float3((max.x + min.x) * 0.5f, (max.y + min.y) * 0.5f, (max.z + min.z) * 0.5f);
+	g_camera_up = float3(0.f, 1.f, 0.f);
 
     g_scene->camera_.reset(new PerspectiveCamera(
         g_camera_pos
@@ -363,7 +500,7 @@ void InitData()
     std::cout << "F-Stop: " << 1.f / (g_scene->camera_->GetAperture() * 10.f) << "\n";
     std::cout << "Sensor size: " << g_camera_sensor_size.x * 1000.f << "x" << g_camera_sensor_size.y * 1000.f << "mm\n";
 
-    g_scene->SetEnvironment(g_envmapname, "", g_envmapmul);
+    g_scene->SetEnvironment(envPaths[g_envIndex], "", g_envmapmul);
 
 #pragma omp parallel for
     for (int i = 0; i < g_cfgs.size(); ++i)
@@ -420,6 +557,26 @@ void OnMouseButton(int btn, int state, int x, int y)
     }
 }
 
+void OnMouseWheel(int btn, int dir, int x, int y)
+{
+	if (dir > 0)
+	{
+		// Zoom in
+		//printf("zoom in \n");
+		g_scene->camera_->MoveForward(-g_mouse_wheel);
+		g_is_mouse_wheel = true;
+	}
+	else
+	{
+		// Zoom out
+		//printf("zoom out \n");
+		g_scene->camera_->MoveForward(+g_mouse_wheel);
+		g_is_mouse_wheel = true;
+	}
+
+	return;
+}
+
 void OnKey(int key, int x, int y)
 {
     switch (key)
@@ -459,6 +616,145 @@ void OnKey(int key, int x, int y)
     default:
         break;
     }
+}
+
+void UpdateMaterialValue(bool isPositive)
+{
+	using namespace Baikal;
+
+	auto scene = g_scene.get();
+	float delta = 0.0f;
+
+	switch (g_material_update_mode)
+	{
+	case MaterialUpdateMode_specularRoughness:
+		if (isPositive)
+			delta = 0.1f;
+		else
+			delta = -0.1f;
+		g_material_changed = true;
+		break;
+	case MaterialUpdateMode_normalMapIntensity:
+		if (isPositive)
+			delta = 0.2f;
+		else
+			delta = -0.2f;
+		g_material_changed = true;
+		break;
+	case MaterialUpdateMode_lightAngle:
+		if (isPositive)
+			delta = 15.f * (PI / 180);
+		else
+			delta = -15.f * (PI / 180);
+		g_light_changed = true;
+		break;
+	default:
+		return;
+	}
+
+	// material update
+	if (g_material_changed)
+	{
+		if (g_material_update_mode == MaterialUpdateMode_specularRoughness)
+		{
+			Scene::specularRoughness_ += delta;
+
+			for (std::size_t i = 0; i < scene->materials_.size(); ++i)
+			{
+				auto& material = scene->materials_[i];
+				if (material.type == Scene::Bxdf::kMicrofacetGGX)
+				{
+					material.ns = Scene::specularRoughness_;
+				}
+			}
+		}
+		else if (g_material_update_mode == MaterialUpdateMode_normalMapIntensity)
+		{
+			Scene::normalMapIntensity_ += delta;
+
+			for (std::size_t i = 0; i < scene->materials_.size(); ++i)
+			{
+				auto& material = scene->materials_[i];
+				if (material.type == Scene::Bxdf::kLambert)
+				{
+					material.ni = Scene::normalMapIntensity_;
+				}
+			}
+		}
+	}
+
+	// light rotate
+	if (g_light_changed)
+	{
+		// 1. rotate camera
+		g_scene->camera_->Rotate(delta);
+
+		// 2. rotate shapes
+		auto rot = rotation_y(delta);
+		auto cameraPos = g_scene->camera_->GetCameraPos();
+		RadeonRays::matrix translate = translation(cameraPos);
+
+		for (std::size_t i = 0; i < g_scene->shapes_.size(); ++i)
+		{
+			g_scene->shapes_[i].m *= translate * rot * inverse(translate);
+		}
+	}
+}
+
+void OnNormalKeys(unsigned char key, int x, int y)
+{
+	switch (key)
+	{
+	case '`':
+		g_is_display_material_info = !g_is_display_material_info;
+	case '1':
+		g_material_update_mode = MaterialUpdateMode_specularRoughness;
+		fprintf(stderr, "Changing Specular Roughness...\n");
+		break;
+	case '2':
+		g_material_update_mode = MaterialUpdateMode_normalMapIntensity;
+		fprintf(stderr, "Changing Normal Intensity...\n");
+		break;
+	case '3':
+		g_material_update_mode = MaterialUpdateMode_lightAngle;
+		fprintf(stderr, "Changing Light Angle...\n");
+		break;
+	case '4':
+		fprintf(stderr, "");
+		break;
+	case '5':
+		fprintf(stderr, "");
+		break;
+	case '6':
+		fprintf(stderr, "");
+		break;
+	case '7':
+		fprintf(stderr, "");
+		break;
+	case 'q':
+		UpdateMaterialValue(false);
+		break;
+	case 'w':
+		UpdateMaterialValue(true);
+		break;
+	case 27:
+		exit(0);
+	default:
+		break;
+	}
+}
+
+void OnNormalKeysUp(unsigned char key, int x, int y)
+{
+	switch (key)
+	{
+	case 'q':
+	case 'w':
+		//g_material_changed = false;
+		break;
+	default:
+		break;
+	}
 }
 
 void OnKeyUp(int key, int x, int y)
@@ -535,18 +831,22 @@ void Update()
 
     if (std::abs(camroty) > 0.001f)
     {
-        g_scene->camera_->Tilt(camroty);
-        //g_scene->camera_->ArcballRotateVertically(float3(0, 0, 0), camroty);
+        //g_scene->camera_->Tilt(camroty);
+        g_scene->camera_->ArcballRotateVertically(float3(0, 0, 0), camroty);
         update = true;
     }
 
     if (std::abs(camrotx) > 0.001f)
     {
 
-        g_scene->camera_->Rotate(camrotx);
-        //g_scene->camera_->ArcballRotateHorizontally(float3(0, 0, 0), camrotx);
+        //g_scene->camera_->Rotate(camrotx);
+        g_scene->camera_->ArcballRotateHorizontally(float3(0, 0, 0), camrotx);
         update = true;
     }
+
+	if (g_is_mouse_wheel) {
+		update = true;
+	}
 
     const float kMovementSpeed = g_cspeed;
     if (g_is_fwd_pressed)
@@ -585,8 +885,22 @@ void Update()
         update = true;
     }
 
+	if (g_material_changed)
+	{
+		g_scene->set_dirty(Baikal::Scene::kMaterialInputs);
+		update = true;
+	}
+
+	if (g_light_changed)
+	{
+		g_scene->set_dirty(Baikal::Scene::kGeometryTransform);
+		update = true;
+	}
+
     if (update)
     {
+		g_is_mouse_wheel = false;
+
         g_scene->set_dirty(Baikal::Scene::kCamera);
 
         if (g_num_samples > -1)
@@ -708,6 +1022,9 @@ void Update()
     }
 
     glutPostRedisplay();
+
+	g_material_changed = false;
+	g_light_changed = false;
 }
 
 void RenderThread(ControlData& cd)
@@ -760,17 +1077,192 @@ void StartRenderThreads()
     std::cout << g_cfgs.size() << " OpenCL submission threads started\n";
 }
 
+void enable_cuda_build_cache(bool enable)
+{
+#ifdef _MSC_VER
+	if (enable)
+		_putenv("CUDA_CACHE_DISABLE=0");
+	else
+		_putenv("CUDA_CACHE_DISABLE=1");
+#else // GCC
+	if (enable)
+		putenv("CUDA_CACHE_DISABLE=0");
+	else
+		putenv("CUDA_CACHE_DISABLE=1");
+#endif
+}
+
+void OBJChageMenu(int option)
+{
+	g_objIndex = option;
+	InitData();
+}
+
+void ENVChageMenu(int option)
+{
+	g_envIndex = option;
+	InitData();
+}
+
+void Right_menu(int)
+{
+}
+
+bool dirExists(const std::string& dirName_in)
+{
+	DWORD ftyp = GetFileAttributesA(dirName_in.c_str());
+	if (ftyp == INVALID_FILE_ATTRIBUTES)
+		return false;  //something is wrong with your path!
+
+	if (ftyp & FILE_ATTRIBUTE_DIRECTORY)
+		return true;   // this is a directory!
+
+	return false;    // this is not a directory!
+}
+
+std::string getexepath()
+{
+	char result[MAX_PATH];
+	auto str = std::string(result, GetModuleFileName(NULL, result, MAX_PATH));
+	str.erase(str.begin() + str.find_last_of('\\'), str.end());
+	return str;
+}
+
+void createGLUTMenus()
+{
+	std::string resourcesPath;
+	std::string envmapsPath;
+	std::string objsPath;
+	
+	auto str = getexepath();
+	resourcesPath = str + std::string("\\..\\resources\\");
+	envmapsPath = resourcesPath + std::string("envmaps\\");
+	objsPath = resourcesPath + std::string("objs\\");
+
+	if (!dirExists(resourcesPath))
+	{
+		fprintf(stderr, "error! resourcesPath not exist.\n");
+		exit(0);
+	}
+	if (!dirExists(envmapsPath))
+	{
+		fprintf(stderr, "error! envmapsPath not exist.\n");
+		exit(0);
+	}
+	if (!dirExists(objsPath))
+	{
+		fprintf(stderr, "error! objsPath not exist.\n");
+		exit(0);
+	}
+
+	// get env maps
+	{
+		HANDLE hFind = INVALID_HANDLE_VALUE;
+		WIN32_FIND_DATA ffd;
+		LARGE_INTEGER filesize;
+		DWORD dwError = 0;
+		std::string search_path = envmapsPath + "/*.hdr";
+		hFind = FindFirstFile(search_path.c_str(), &ffd);
+		do
+		{
+			if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+			{
+				fprintf(stderr, "  %s   <DIR>\n", ffd.cFileName);
+			}
+			else
+			{
+				filesize.LowPart = ffd.nFileSizeLow;
+				filesize.HighPart = ffd.nFileSizeHigh;
+				fprintf(stderr, "  %s   %ld bytes\n", ffd.cFileName, filesize.QuadPart);
+				envPaths.push_back(envmapsPath + ffd.cFileName);
+			}
+		} while (FindNextFile(hFind, &ffd) != 0);
+
+		dwError = GetLastError();
+		if (dwError != ERROR_NO_MORE_FILES)
+		{
+			fprintf(stderr, "FindFirstFile");
+		}
+		FindClose(hFind);
+	}
+
+	// get objs
+	{
+		HANDLE hFind = INVALID_HANDLE_VALUE;
+		WIN32_FIND_DATA ffd;
+		LARGE_INTEGER filesize;
+		DWORD dwError = 0;
+		std::string search_path = objsPath + "/*.*";
+		hFind = FindFirstFile(search_path.c_str(), &ffd);
+		do
+		{
+			if ((ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) &&
+				strcmp(ffd.cFileName, ".") != 0 &&
+				strcmp(ffd.cFileName, "..") != 0)
+			{
+				fprintf(stderr, "  %s   <DIR>\n", ffd.cFileName);
+
+				OBJResources objres;
+				objres.basePath = objsPath + ffd.cFileName + "\\";
+
+				HANDLE hFind2 = INVALID_HANDLE_VALUE;
+				WIN32_FIND_DATA ffd2;
+				hFind2 = FindFirstFile((objres.basePath + "/*.obj").c_str(), &ffd2);
+				if (!(ffd2.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+				{
+					objres.objFilePath = objres.basePath + ffd2.cFileName;
+					objPaths.push_back(objres);
+				}
+			}
+		} while (FindNextFile(hFind, &ffd) != 0);
+
+		dwError = GetLastError();
+		if (dwError != ERROR_NO_MORE_FILES)
+		{
+			fprintf(stderr, "FindFirstFile");
+		}
+		FindClose(hFind);
+	}
+
+	int objMenu;
+	int envMenu;
+
+	// create the menu and
+	// tell glut that "processMenuEvents" will
+	// handle the events
+	objMenu = glutCreateMenu(OBJChageMenu);
+	for (int i = 0; i < objPaths.size(); ++i)
+	{
+		glutAddMenuEntry(objPaths[i].basePath.c_str(), i);
+	}
+
+	envMenu = glutCreateMenu(ENVChageMenu);
+	for (int i = 0; i < envPaths.size(); ++i)
+	{
+		glutAddMenuEntry(envPaths[i].c_str(), i);
+	}
+
+	glutCreateMenu(Right_menu);
+	glutAddSubMenu("Change OBJ", objMenu);
+	glutAddSubMenu("Change ENV", envMenu);
+
+	// attach the menu to the right button
+	glutAttachMenu(GLUT_RIGHT_BUTTON);
+}
+
 int main(int argc, char * argv[])
 {
+	enable_cuda_build_cache(false);
+
     // Command line parsing
-    char* path = GetCmdOption(argv, argv + argc, "-p");
-    g_path = path ? path : g_path;
+    //char* path = GetCmdOption(argv, argv + argc, "-p");
+    //g_path = path ? path : g_path;
 
-    char* modelname = GetCmdOption(argv, argv + argc, "-f");
-    g_modelname = modelname ? modelname : g_modelname;
+    //char* modelname = GetCmdOption(argv, argv + argc, "-f");
+    //g_modelname = modelname ? modelname : g_modelname;
 
-    char* envmapname = GetCmdOption(argv, argv + argc, "-e");
-    g_envmapname = envmapname ? envmapname : g_envmapname;
+    //char* envmapname = GetCmdOption(argv, argv + argc, "-e");
+    //g_envmapname = envmapname ? envmapname : g_envmapname;
 
     char* width = GetCmdOption(argv, argv + argc, "-w");
     g_window_width = width ? atoi(width) : g_window_width;
@@ -857,6 +1349,8 @@ int main(int argc, char * argv[])
     glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE | GLUT_DEPTH);
     glutCreateWindow("App");
 
+	createGLUTMenus();
+
 #ifndef __APPLE__
     GLenum err = glewInit();
     if (err != GLEW_OK)
@@ -876,9 +1370,12 @@ int main(int argc, char * argv[])
         glutDisplayFunc(Render);
         glutReshapeFunc(Reshape);
 
+		glutKeyboardFunc(OnNormalKeys);
+		glutKeyboardUpFunc(OnNormalKeysUp);
         glutSpecialFunc(OnKey);
         glutSpecialUpFunc(OnKeyUp);
         glutMouseFunc(OnMouseButton);
+		glutMouseWheelFunc(OnMouseWheel);
         glutMotionFunc(OnMouseMove);
         glutIdleFunc(Update);
 

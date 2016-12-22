@@ -492,7 +492,7 @@ float3 MicrofacetGGX_Sample(
     float* pdf
     )
 {
-    const float roughness = Texture_GetValue1f(dg->mat.ns, dg->uv, TEXTURE_ARGS_IDX(dg->mat.nsmapidx));
+	const float roughness = Texture_GetValue1f(dg->mat.ns, dg->uv, TEXTURE_ARGS_IDX(dg->mat.nsmapidx));
 
     MicrofacetDistribution_GGX_Sample(roughness, dg, wi, TEXTURE_ARGS, sample, wo, pdf);
 
@@ -716,11 +716,16 @@ float3 Lambert_Sample(
 
     *wo = Sample_MapToHemisphere(sample, dg->n, 1.f);
 
-    float F = dg->mat.fresnel;
+	float F = dg->mat.fresnel;
 
     *pdf = fabs(dot(dg->n, *wo)) / PI;
 
-    return F * kd / PI;
+	float3 returnValue = F * kd / PI;
+
+	//if (dg->mat.kxmapidx != -1) // If material has texture, multiply diffuse color. [Manny]
+	//	returnValue *= dg->mat.kx.xyz;
+
+	return returnValue;
 }
 
 /*

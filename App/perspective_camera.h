@@ -38,6 +38,10 @@ public:
         RadeonRays::float3 const& at, 
         RadeonRays::float3 const& up);
 
+	RadeonRays::float3 GetCameraPos() const; // [Manny]
+
+	float GetCameraAngle() const; // between forward and z-axis. [Manny]
+
     // Set camera focus distance in meters,
     // this is essentially a distance from the lens to the focal plane.
     // Altering this is similar to rotating the focus ring on real lens.

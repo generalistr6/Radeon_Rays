@@ -17,7 +17,7 @@ namespace Baikal
 
     struct ClwScene
     {
-        CLWBuffer<RadeonRays::float3> vertices;
+		CLWBuffer<RadeonRays::float3> vertices;
         CLWBuffer<RadeonRays::float3> normals;
         CLWBuffer<RadeonRays::float2> uvs;
         CLWBuffer<int> indices;
